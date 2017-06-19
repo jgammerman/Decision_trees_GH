@@ -1,0 +1,149 @@
+---
+title: "Decision trees for regression problems"
+author: "James Gammerman"
+date: "26 April 2017"
+output: html_document
+---
+
+# Predicting house prices in Boston, USA
+ 
+```{r include = FALSE}
+# for the Carseats dataset
+#install.packages("tree",repos = "http://cran.us.r-project.org")
+library(tree)
+#install.packages("ISLR",repos = "http://cran.us.r-project.org")
+library(ISLR)
+
+# for the Boston dataset
+#install.packages("MASS",repos = "http://cran.us.r-project.org")
+library(MASS)
+data(Boston)
+```
+
+* The Boston dataset (part of the standard R distribution) describes housing values and other information about Boston suburbs - 506 neighbourhoods in total. In particular, it records median house value *(medv)* for each neighbourhood 
+
+* Let's try to predict median house value using 13 attributes such as average number of rooms per house *(rm)*, average age of houses *(age)*, and percent of households with low socioeconomic status *(lstat)*.
+
+![A snapshot of the Boston dataset](Boston.png)
+
+***
+# Fitting the model
+* First we create the training set and fit the tree to the training data:
+```{r}
+set.seed(1)
+train <- sample(1:nrow(Boston), nrow(Boston)/2)
+tree.boston <- tree(medv ~ ., Boston, subset = train)
+summary(tree.boston)
+```
+
+* Notice that the output of summary() indicates that only three of the variables have been used in constructing the tree.
+* In the context of a regression tree, the deviance is simply the sum of squared errors for the tree (see lec slide 46). We now plot the tree.
+
+***
+# The resulting decision tree 
+```{r, fig.width = 4, fig.height = 4}
+plot(tree.boston)
+text(tree.boston, pretty = 0)
+```
+
+* The tree indicates that lower values of lstat correspond to more expensive houses. The tree predicts a median house price of $46,380 for larger homes in suburbs in which residents have high socioeconomic status (rm>=7.437 and lstat<9.715).
+
+***
+# Could cost complexity pruning improve our prediction?
+* Now we use the cv.tree() function to see whether pruning the tree will improve performance.
+```{r, fig.width = 4, fig.height = 4}
+cv.boston <- cv.tree(tree.boston)
+plot(cv.boston$size, cv.boston$dev, type = 'b')
+```
+
+* In this case, the most complex tree is selected by cross-validation. 
+```{r, echo = FALSE, eval = FALSE}
+#However, if we wish to prune the tree, we could do so as follows, using the prune.tree() function:
+prune.boston <- prune.tree(tree.boston, best=5)
+plot(prune.boston)
+text(prune.boston, pretty=0)
+```
+
+***
+# Predictions
+* Therefore we use the unpruned tree to make predictions on the test set:
+```{r, fig.width = 4, fig.height = 4}
+yhat <- predict(tree.boston, newdata = Boston [-train,])   # predictions for Boston medv
+boston.test  = Boston[-train, "medv"]  # correct results for Boston medv
+plot(yhat, boston.test)
+abline(0,1)  # The function abline(a,b) draws a line with intercept a and slope b
+mean((yhat - boston.test)^2)  
+```
+* This is the test set MSE, and we get a value of 25.05. The sqrt is 5.005, indicating that this model leads to test predictions that are within around $5,005 of the true median home value for the suburb!
+
+***
+# Problem 2 - predicting sales using regression trees 
+
+* First we split the Carseats data set (400 observations) into a training set of size 200 and a test set of the same size:
+
+```{r}
+data(Carseats)
+attach(Carseats)
+set.seed(3)
+training.set <- sample(1:nrow(Carseats), nrow(Carseats)/2)  # creates "training set" (actually just a vector of random numbers)
+test.set <- Carseats[-training.set,] # creates test set
+Sales.test <- Sales[-training.set]  # the "correct" values for Sales in our test set that we will test our predictions against
+```
+
+***
+* First we fit, summarise and plot the regression tree:
+```{r}
+tree.Sales <- tree(Sales ~., Carseats, subset = training.set)   # fits the regression tree
+summary(tree.Sales)
+plot(tree.Sales)
+text(tree.Sales, pretty = 0)
+```
+
+* **Interpretation: most important factor is shelf location (bad or medium) followed by price**
+
+***  
+* Now let's use our tree to make some predictions on the test set.
+
+```{r, fig.width=4, fig.height=4}
+yhat <- predict(tree.Sales, newdata = Carseats[-training.set,])   # get predictions on the test set using our tree
+Sales.correct  = Carseats[-training.set, "Sales"]  # correct results for Boston medv
+plot(yhat, Sales.correct)  # plot prediction for unit sales vs correct value
+abline(0,1)  # The function abline(a,b) draws a line with intercept a and slope b
+```
+
+***
+Now let's calculate the mean squared error:
+```{r}
+mean((yhat - Sales.correct)^2) 
+```
+
+* Test set MSE = 4.71, so this model leads to predictions that are within around (sqrt(4.71)) x 1000 = 2170 of the correct number of unit Sales at each location
+
+# Cross complexity pruning
+
+* Let's again use cross-validation in order to determine the optimal level of tree complexity. Does pruning the tree improve the test MSE?
+
+* First we use cross validation (using the cv.tree() function) to generate a plot of dev (corresponding to error rate) vs size of tree:
+
+```{r, fig.width=4, fig.height=4}
+cv.Sales <- cv.tree(tree.Sales)
+cv.Sales
+plot(cv.Sales$size, cv.Sales$dev, type = 'b')
+```
+
+* Cross-validation suggests that the optimal level of tree complexity is 16 nodes, with k (placeholder for alpha tuning parameter) = - infinity. Now we prune the tree accordingly.
+ 
+```{r, fig.width=4, fig.height=4}
+prune.Sales <- prune.tree(tree.Sales, best=16)
+plot(prune.Sales)
+text(prune.Sales, pretty=0)
+yhat2 <- predict(prune.Sales, newdata = Carseats[-training.set,])
+plot(yhat2, Sales.correct)  
+abline(0,1) 
+mean((yhat2 - Sales.correct)^2) 
+```
+
+* The test MSE is 4.71 again i.e. pruning the tree did not improve the test MSE
+
+     
+
